@@ -1,0 +1,102 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: #000;
+    width: 100vw;
+    min-height: 100vh;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+canvas {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+}
+
+#ui {
+    position: relative;
+    z-index: 1;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    padding: 48px 32px 40px;
+    gap: 32px;
+}
+
+/* Logo — scales with viewport, generous on 4K */
+#logo {
+    width: min(880px, 88vw);
+    height: auto;
+    filter: drop-shadow(0 2px 32px rgba(0, 0, 0, 0.85));
+}
+
+/* Badge grid — strict 2x2, centered */
+#badges {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 280px));
+    grid-template-rows: repeat(2, auto);
+    gap: 20px;
+    align-content: center;
+    align-items: center;
+    justify-content: center;
+    justify-items: center;
+}
+
+#badges a {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    transition:
+        opacity 0.15s,
+        transform 0.15s;
+}
+
+#badges a:hover {
+    opacity: 0.88;
+    transform: translateY(-3px);
+}
+#badges a:active {
+    opacity: 0.7;
+    transform: translateY(0);
+}
+
+#badges img {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+
+/* Disclaimer */
+#disclaimer {
+    max-width: 640px;
+    text-align: center;
+    color: rgba(255, 255, 255, 0.45);
+    font-size: 12px;
+    line-height: 1.6;
+    text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+}
+
+#disclaimer a {
+    color: rgba(255, 255, 255, 0.6);
+    text-decoration: underline;
+}
+
+@media (max-width: 640px) {
+    #badges {
+        grid-template-columns: minmax(0, 320px);
+        grid-template-rows: unset;
+        gap: 14px;
+    }
+    #ui {
+        padding: 36px 20px 32px;
+    }
+}
