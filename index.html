@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Panorama</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; width: 100vw; height: 100vh; overflow: hidden; }
+  canvas { display: block; width: 100%; height: 100%; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+
+const img = new Image();
+img.src = 'Panorama.webp';
+
+let posX = 0, posY = 0;
+let timeOffset = Math.random() * 1000;
+let lastTime = null;
+
+function remainder(a, b) {
+  return a - Math.floor(a / b) * b;
+}
+
+function fade(t, a, b) {
+  return a + (b - a) * t;
+}
+
+// Simple 2D gradient noise (value noise as simplex approximation)
+function hash(x, y) {
+  let h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+  return h - Math.floor(h);
+}
+
+function smoothNoise(x, y) {
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const xf = x - xi, yf = y - yi;
+  const u = xf * xf * (3 - 2 * xf);
+  const v = yf * yf * (3 - 2 * yf);
+  const a = hash(xi, yi), b = hash(xi+1, yi);
+  const c = hash(xi, yi+1), d = hash(xi+1, yi+1);
+  return fade(v, fade(u, a, b), fade(u, c, d));
+}
+
+function octavedNoise(x, y, octaves = 4, lacunarity = 2, persistence = 0.5) {
+  let val = 0, amp = 1, freq = 1, max = 0;
+  for (let i = 0; i < octaves; i++) {
+    val += smoothNoise(x * freq, y * freq) * amp;
+    max += amp;
+    amp *= persistence;
+    freq *= lacunarity;
+  }
+  return val / max;
+}
+
+function octavedNoise1D(t, freq, octaves, lacunarity, persistence) {
+  return octavedNoise(t * freq, 0, octaves, lacunarity, persistence);
+}
+
+function powSign(x, p) {
+  return Math.sign(x) * Math.pow(Math.abs(x), p);
+}
+
+function saturate(x) {
+  return Math.max(0, Math.min(1, x));
+}
+
+function resize() {
+  canvas.width = canvas.clientWidth;
+  canvas.height = canvas.clientHeight;
+}
+window.addEventListener('resize', resize);
+resize();
+
+function draw(timestamp) {
+  if (!img.complete) { requestAnimationFrame(draw); return; }
+  if (!lastTime) lastTime = timestamp;
+  const frameDuration = Math.min((timestamp - lastTime) / 1000, 0.1);
+  lastTime = timestamp;
+
+  const W = canvas.width, H = canvas.height;
+  const num = remainder(timestamp / 1000 + timeOffset, 10000);
+
+  // Pan drift
+  const nx = 2 * octavedNoise1D(num, 0.02, 4, 2, 0.5) - 1;
+  const ny = 2 * octavedNoise1D(num + 100, 0.02, 4, 2, 0.5) - 1;
+  posX += 0.06 * nx * frameDuration;
+  posY += 0.06 * ny * frameDuration;
+  posX = remainder(posX, 1);
+  posY = remainder(posY, 1);
+
+  // Zoom pulse
+  const f = 0.5 * powSign(Math.sin(0.21 * num + 2), 2) + 0.5;
+  const zoomU = fade(f, 0.3, 0.5); // half-width in UV space
+  const zoomV = zoomU / img.height * img.width / W * H;
+
+  // Draw tiled image
+  const IW = img.width, IH = img.height;
+  // UV range: [posX - zoomU, posX + zoomU] x [posY - zoomV, posY + zoomV]
+  // Map that to pixel space on img (tiling via modulo)
+  // We'll draw using a pattern for tiling
+  const offscreenSize = 512;
+  const pattern = ctx.createPattern(img, 'repeat');
+
+  ctx.save();
+  ctx.clearRect(0, 0, W, H);
+
+  // Scale/translate pattern to simulate UV zoom + pan
+  const scaleX = W / (2 * zoomU * IW);
+  const scaleY = H / (2 * zoomV * IH);
+  const offsetX = -(posX - zoomU) * IW * scaleX;
+  const offsetY = -(posY - zoomV) * IH * scaleY;
+
+  const mat = new DOMMatrix();
+  mat.a = scaleX;
+  mat.d = scaleY;
+  mat.e = offsetX;
+  mat.f = offsetY;
+  pattern.setTransform(mat);
+
+  ctx.fillStyle = pattern;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+
+  // Draw overlay squares
+  drawSquares(num, W, H);
+
+  requestAnimationFrame(draw);
+}
+
+function drawSquares(num, W, H) {
+  const cellSize = W / 12;
+  for (let x = 0; x < W; x += cellSize) {
+    for (let y = 0; y < H; y += cellSize) {
+      // Border flicker (rectangle outline)
+      const v1 = saturate(octavedNoise(x + 1000, y, 0.7 * num * 0.5, 1, 2, 1) - 0.1);
+      const a1 = 0.35 * Math.pow(v1, 1);
+      if (a1 > 0.01) {
+        ctx.strokeStyle = `rgba(0,0,0,${a1})`;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x, y, cellSize, cellSize);
+      }
+
+      // Fill flicker (quad fill)
+      const v2 = octavedNoise(x, y, 0.5 * num * 0.5, 1, 2, 1);
+      const a2 = 0.7 * Math.pow(v2, 3);
+      if (a2 > 0.01) {
+        ctx.fillStyle = `rgba(0,0,0,${a2})`;
+        ctx.fillRect(x, y, cellSize, cellSize);
+      }
+    }
+  }
+}
+
+// Need 3-arg octavedNoise for squares (x, y, t seed)
+function octavedNoise3(x, y, t, freq, octaves, lac, pers) {
+  return octavedNoise(x * freq + t * 0.3, y * freq, octaves, lac, pers);
+}
+
+// Override drawSquares to match signature
+function drawSquares(num, W, H) {
+  const cellSize = W / 12;
+  for (let x = 0; x < W; x += cellSize) {
+    for (let y = 0; y < H; y += cellSize) {
+      const v1 = saturate(octavedNoise3(x + 1000, y, 0.7 * num, 0.5, 1, 2, 1) - 0.1);
+      const a1 = 0.35 * Math.pow(v1, 1);
+      if (a1 > 0.01) {
+        ctx.strokeStyle = `rgba(0,0,0,${a1})`;
+        ctx.lineWidth = 1;
+        ctx.strokeRect(x, y, cellSize, cellSize);
+      }
+
+      const v2 = octavedNoise3(x, y, 0.5 * num, 0.5, 1, 2, 1);
+      const a2 = 0.7 * Math.pow(v2, 3);
+      if (a2 > 0.01) {
+        ctx.fillStyle = `rgba(0,0,0,${a2})`;
+        ctx.fillRect(x, y, cellSize, cellSize);
+      }
+    }
+  }
+}
+
+img.onload = () => requestAnimationFrame(draw);
+img.onerror = () => {
+  ctx.fillStyle = '#222';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = '#fff';
+  ctx.font = '16px sans-serif';
+  ctx.fillText('Could not load Panorama.webp — place it in the same folder as this HTML file.', 20, 40);
+};
+</script>
+</body>
+</html>
