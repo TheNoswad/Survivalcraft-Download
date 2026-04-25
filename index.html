@@ -1,198 +1,494 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Panorama</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { background: #000; width: 100vw; height: 100vh; overflow: hidden; }
-  canvas { display: block; width: 100%; height: 100%; }
-</style>
-</head>
-<body>
-<canvas id="c"></canvas>
-<script>
-const canvas = document.getElementById('c');
-const ctx = canvas.getContext('2d');
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Survivalcraft Download</title>
 
-const img = new Image();
-img.src = 'Panorama.webp';
+        <!-- favicons (copy favicon_io/ contents to your project root) -->
+        <link
+            rel="apple-touch-icon"
+            sizes="180x180"
+            href="apple-touch-icon.png"
+        />
+        <link
+            rel="icon"
+            type="image/png"
+            sizes="32x32"
+            href="favicon-32x32.png"
+        />
+        <link
+            rel="icon"
+            type="image/png"
+            sizes="16x16"
+            href="favicon-16x16.png"
+        />
+        <link rel="manifest" href="site.webmanifest" />
 
-let posX = 0, posY = 0;
-let timeOffset = Math.random() * 1000;
-let lastTime = null;
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
 
-function remainder(a, b) {
-  return a - Math.floor(a / b) * b;
-}
+            body {
+                background: #000;
+                width: 100vw;
+                min-height: 100vh;
+                font-family:
+                    -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            }
 
-function fade(t, a, b) {
-  return a + (b - a) * t;
-}
+            canvas {
+                position: fixed;
+                inset: 0;
+                width: 100%;
+                height: 100%;
+            }
 
-// Simple 2D gradient noise (value noise as simplex approximation)
-function hash(x, y) {
-  let h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
-  return h - Math.floor(h);
-}
+            #ui {
+                position: relative;
+                z-index: 1;
+                min-height: 100vh;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: space-between;
+                padding: 48px 32px 40px;
+                gap: 32px;
+            }
 
-function smoothNoise(x, y) {
-  const xi = Math.floor(x), yi = Math.floor(y);
-  const xf = x - xi, yf = y - yi;
-  const u = xf * xf * (3 - 2 * xf);
-  const v = yf * yf * (3 - 2 * yf);
-  const a = hash(xi, yi), b = hash(xi+1, yi);
-  const c = hash(xi, yi+1), d = hash(xi+1, yi+1);
-  return fade(v, fade(u, a, b), fade(u, c, d));
-}
+            /* Logo — scales with viewport, generous on 4K */
+            #logo {
+                width: min(880px, 88vw);
+                height: auto;
+                filter: drop-shadow(0 2px 32px rgba(0, 0, 0, 0.85));
+            }
 
-function octavedNoise(x, y, octaves = 4, lacunarity = 2, persistence = 0.5) {
-  let val = 0, amp = 1, freq = 1, max = 0;
-  for (let i = 0; i < octaves; i++) {
-    val += smoothNoise(x * freq, y * freq) * amp;
-    max += amp;
-    amp *= persistence;
-    freq *= lacunarity;
-  }
-  return val / max;
-}
+            /* Badge grid — strict 2x2, centered */
+            #badges {
+                flex: 1;
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 280px));
+                grid-template-rows: repeat(2, auto);
+                gap: 20px;
+                align-content: center;
+                align-items: center;
+                justify-content: center;
+                justify-items: center;
+            }
 
-function octavedNoise1D(t, freq, octaves, lacunarity, persistence) {
-  return octavedNoise(t * freq, 0, octaves, lacunarity, persistence);
-}
+            #badges a {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 100%;
+                transition:
+                    opacity 0.15s,
+                    transform 0.15s;
+            }
 
-function powSign(x, p) {
-  return Math.sign(x) * Math.pow(Math.abs(x), p);
-}
+            #badges a:hover {
+                opacity: 0.88;
+                transform: translateY(-3px);
+            }
+            #badges a:active {
+                opacity: 0.7;
+                transform: translateY(0);
+            }
 
-function saturate(x) {
-  return Math.max(0, Math.min(1, x));
-}
+            #badges img {
+                width: 100%;
+                height: auto;
+                display: block;
+            }
 
-function resize() {
-  canvas.width = canvas.clientWidth;
-  canvas.height = canvas.clientHeight;
-}
-window.addEventListener('resize', resize);
-resize();
+            /* Disclaimer */
+            #disclaimer {
+                max-width: 640px;
+                text-align: center;
+                color: rgba(255, 255, 255, 0.45);
+                font-size: 12px;
+                line-height: 1.6;
+                text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
+            }
 
-function draw(timestamp) {
-  if (!img.complete) { requestAnimationFrame(draw); return; }
-  if (!lastTime) lastTime = timestamp;
-  const frameDuration = Math.min((timestamp - lastTime) / 1000, 0.1);
-  lastTime = timestamp;
+            #disclaimer a {
+                color: rgba(255, 255, 255, 0.6);
+                text-decoration: underline;
+            }
 
-  const W = canvas.width, H = canvas.height;
-  const num = remainder(timestamp / 1000 + timeOffset, 10000);
+            @media (max-width: 640px) {
+                #badges {
+                    grid-template-columns: minmax(0, 320px);
+                    grid-template-rows: unset;
+                    gap: 14px;
+                }
+                #ui {
+                    padding: 36px 20px 32px;
+                }
+            }
+        </style>
+    </head>
+    <body>
+        <canvas id="c"></canvas>
 
-  // Pan drift
-  const nx = 2 * octavedNoise1D(num, 0.02, 4, 2, 0.5) - 1;
-  const ny = 2 * octavedNoise1D(num + 100, 0.02, 4, 2, 0.5) - 1;
-  posX += 0.06 * nx * frameDuration;
-  posY += 0.06 * ny * frameDuration;
-  posX = remainder(posX, 1);
-  posY = remainder(posY, 1);
+        <div id="ui">
+            <img id="logo" src="Logo.webp" alt="Survivalcraft" />
 
-  // Zoom pulse
-  const f = 0.5 * powSign(Math.sin(0.21 * num + 2), 2) + 0.5;
-  const zoomU = fade(f, 0.3, 0.5); // half-width in UV space
-  const zoomV = zoomU / img.height * img.width / W * H;
+            <div id="badges">
+                <a
+                    id="badge-apple"
+                    href="https://apps.apple.com/us/app/survivalcraft-2/id1185580782"
+                    aria-label="Download on the App Store"
+                >
+                    <img src="" alt="Download on the App Store" />
+                </a>
+                <a
+                    id="badge-google"
+                    href="https://play.google.com/store/apps/details?id=com.candyrufusgames.survivalcraft2"
+                    aria-label="Get it on Google Play"
+                >
+                    <img src="" alt="Get it on Google Play" />
+                </a>
+                <a
+                    id="badge-amazon"
+                    href="https://www.amazon.com/dp/B01N6GTF7M"
+                    aria-label="Available at Amazon Appstore"
+                >
+                    <img src="" alt="Available at Amazon Appstore" />
+                </a>
+                <a
+                    id="badge-ms"
+                    href="https://apps.microsoft.com/detail/9phc48p58nb2"
+                    aria-label="Get it from Microsoft"
+                >
+                    <img
+                        src="https://get.microsoft.com/images/en-us%20dark.svg"
+                        alt="Get it from Microsoft"
+                    />
+                </a>
+            </div>
 
-  // Draw tiled image
-  const IW = img.width, IH = img.height;
-  // UV range: [posX - zoomU, posX + zoomU] x [posY - zoomV, posY + zoomV]
-  // Map that to pixel space on img (tiling via modulo)
-  // We'll draw using a pattern for tiling
-  const offscreenSize = 512;
-  const pattern = ctx.createPattern(img, 'repeat');
+            <p id="disclaimer">
+                This is an unofficial download page and is not affiliated with,
+                endorsed by, or associated with
+                <a
+                    href="https://kaalus.wordpress.com"
+                    target="_blank"
+                    rel="noopener"
+                    >CandyRufus Games</a
+                >
+                or the developers of Survivalcraft. All trademarks, store
+                badges, and app names are the property of their respective
+                owners.
+            </p>
+        </div>
 
-  ctx.save();
-  ctx.clearRect(0, 0, W, H);
+        <script>
+            // ---------------------------------------------------------------------------
+            // Locale-aware badge selection
+            // ---------------------------------------------------------------------------
 
-  // Scale/translate pattern to simulate UV zoom + pan
-  const scaleX = W / (2 * zoomU * IW);
-  const scaleY = H / (2 * zoomV * IH);
-  const offsetX = -(posX - zoomU) * IW * scaleX;
-  const offsetY = -(posY - zoomV) * IH * scaleY;
+            const APPLE_LOCALES = [
+                "ar",
+                "az",
+                "bg",
+                "bn-IN",
+                "ca-ES",
+                "cs-CZ",
+                "da-DK",
+                "de",
+                "el-GR",
+                "en",
+                "es",
+                "es-MX",
+                "et-EE",
+                "fi",
+                "fil-PH",
+                "fr",
+                "fr-CA",
+                "gu-IN",
+                "he",
+                "he-IL",
+                "hi-IN",
+                "hr",
+                "hu",
+                "id",
+                "it",
+                "ja-JP",
+                "kn-IN",
+                "ko-KR",
+                "kri-SL",
+                "lt",
+                "lv",
+                "ml-IN",
+                "mr-IN",
+                "ms-MY",
+                "mt",
+                "nb-NO",
+                "nl",
+                "or-IN",
+                "pa-IN",
+                "pl",
+                "pt-BR",
+                "pt-PT",
+                "ro",
+                "ru",
+                "sk",
+                "sl-SI",
+                "sv-SE",
+                "ta-IN",
+                "te-IN",
+                "th",
+                "tr",
+                "uk-UA",
+                "ur-IN",
+                "vi-VN",
+                "zh-CN",
+                "zh-TW",
+            ];
 
-  const mat = new DOMMatrix();
-  mat.a = scaleX;
-  mat.d = scaleY;
-  mat.e = offsetX;
-  mat.f = offsetY;
-  pattern.setTransform(mat);
+            const GOOGLE_LOCALES = [
+                "af",
+                "ar-SA",
+                "az",
+                "be",
+                "bg",
+                "bn",
+                "bs",
+                "ca",
+                "cs",
+                "da",
+                "de",
+                "el",
+                "en",
+                "es",
+                "es-419",
+                "et",
+                "eu",
+                "fa",
+                "fi",
+                "fil",
+                "fr",
+                "fr-CA",
+                "ga",
+                "gl",
+                "gu",
+                "he",
+                "hi",
+                "hr",
+                "hu",
+                "hy",
+                "id",
+                "is",
+                "it",
+                "ja",
+                "ka",
+                "kk",
+                "km",
+                "kn",
+                "ko",
+                "ky",
+                "lo",
+                "lt",
+                "lv",
+                "mk",
+                "ml",
+                "mn",
+                "mr",
+                "ms",
+                "my",
+                "nb",
+                "ne",
+                "nl",
+                "pa",
+                "pl",
+                "pt-BR",
+                "pt-PT",
+                "ro",
+                "ru",
+                "si",
+                "sk",
+                "sl",
+                "sq",
+                "sr",
+                "sv",
+                "sw",
+                "ta",
+                "te",
+                "th",
+                "tr",
+                "uk",
+                "ur",
+                "uz",
+                "vi",
+                "zh-CN",
+                "zh-TW",
+                "zu",
+            ];
 
-  ctx.fillStyle = pattern;
-  ctx.fillRect(0, 0, W, H);
-  ctx.restore();
+            const AMAZON_LOCALES = [
+                "de",
+                "en",
+                "es",
+                "fr",
+                "it",
+                "ja",
+                "pt-BR",
+            ];
 
-  // Draw overlay squares
-  drawSquares(num, W, H);
+            function pickBadge(available, lang, region) {
+                const full = region ? `${lang}-${region}` : null;
+                if (full && available.includes(full)) return full;
+                if (available.includes(lang)) return lang;
+                const partial = available.find((l) => l.startsWith(lang + "-"));
+                if (partial) return partial;
+                return available.includes("en") ? "en" : available[0];
+            }
 
-  requestAnimationFrame(draw);
-}
+            function setBadge(id, dir, available, lang, region) {
+                const locale = pickBadge(available, lang, region);
+                const el = document.getElementById(id);
+                if (el)
+                    el.querySelector("img").src = `badges/${dir}/${locale}.svg`;
+            }
 
-function drawSquares(num, W, H) {
-  const cellSize = W / 12;
-  for (let x = 0; x < W; x += cellSize) {
-    for (let y = 0; y < H; y += cellSize) {
-      // Border flicker (rectangle outline)
-      const v1 = saturate(octavedNoise(x + 1000, y, 0.7 * num * 0.5, 1, 2, 1) - 0.1);
-      const a1 = 0.35 * Math.pow(v1, 1);
-      if (a1 > 0.01) {
-        ctx.strokeStyle = `rgba(0,0,0,${a1})`;
-        ctx.lineWidth = 1;
-        ctx.strokeRect(x, y, cellSize, cellSize);
-      }
+            const raw = (navigator.language || "en")
+                .replace("_", "-")
+                .split("-");
+            const lang = raw[0].toLowerCase();
+            const region = raw[1] ? raw[1].toUpperCase() : null;
 
-      // Fill flicker (quad fill)
-      const v2 = octavedNoise(x, y, 0.5 * num * 0.5, 1, 2, 1);
-      const a2 = 0.7 * Math.pow(v2, 3);
-      if (a2 > 0.01) {
-        ctx.fillStyle = `rgba(0,0,0,${a2})`;
-        ctx.fillRect(x, y, cellSize, cellSize);
-      }
-    }
-  }
-}
+            setBadge("badge-apple", "apple", APPLE_LOCALES, lang, region);
+            setBadge("badge-google", "google", GOOGLE_LOCALES, lang, region);
+            setBadge("badge-amazon", "amazon", AMAZON_LOCALES, lang, region);
+            document.documentElement.lang = region ? `${lang}-${region}` : lang;
 
-// Need 3-arg octavedNoise for squares (x, y, t seed)
-function octavedNoise3(x, y, t, freq, octaves, lac, pers) {
-  return octavedNoise(x * freq + t * 0.3, y * freq, octaves, lac, pers);
-}
+            // ---------------------------------------------------------------------------
+            // Panorama animation
+            // ---------------------------------------------------------------------------
+            const canvas = document.getElementById("c");
+            const ctx = canvas.getContext("2d");
+            const bg = new Image();
+            bg.src = "Panorama.webp";
 
-// Override drawSquares to match signature
-function drawSquares(num, W, H) {
-  const cellSize = W / 12;
-  for (let x = 0; x < W; x += cellSize) {
-    for (let y = 0; y < H; y += cellSize) {
-      const v1 = saturate(octavedNoise3(x + 1000, y, 0.7 * num, 0.5, 1, 2, 1) - 0.1);
-      const a1 = 0.35 * Math.pow(v1, 1);
-      if (a1 > 0.01) {
-        ctx.strokeStyle = `rgba(0,0,0,${a1})`;
-        ctx.lineWidth = 1;
-        ctx.strokeRect(x, y, cellSize, cellSize);
-      }
+            let posX = 0,
+                posY = 0;
+            let timeOffset = Math.random() * 1000;
+            let lastTime = null;
 
-      const v2 = octavedNoise3(x, y, 0.5 * num, 0.5, 1, 2, 1);
-      const a2 = 0.7 * Math.pow(v2, 3);
-      if (a2 > 0.01) {
-        ctx.fillStyle = `rgba(0,0,0,${a2})`;
-        ctx.fillRect(x, y, cellSize, cellSize);
-      }
-    }
-  }
-}
+            const rem = (a, b) => a - Math.floor(a / b) * b;
+            const lerp = (t, a, b) => a + (b - a) * t;
+            const sat = (x) => Math.max(0, Math.min(1, x));
 
-img.onload = () => requestAnimationFrame(draw);
-img.onerror = () => {
-  ctx.fillStyle = '#222';
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = '#fff';
-  ctx.font = '16px sans-serif';
-  ctx.fillText('Could not load Panorama.webp — place it in the same folder as this HTML file.', 20, 40);
-};
-</script>
-</body>
+            function hash(x, y) {
+                const h = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+                return h - Math.floor(h);
+            }
+            function smooth(x, y) {
+                const xi = Math.floor(x),
+                    yi = Math.floor(y);
+                const u = ((f) => f * f * (3 - 2 * f))(x - xi);
+                const v = ((f) => f * f * (3 - 2 * f))(y - yi);
+                return lerp(
+                    v,
+                    lerp(u, hash(xi, yi), hash(xi + 1, yi)),
+                    lerp(u, hash(xi, yi + 1), hash(xi + 1, yi + 1)),
+                );
+            }
+            function octave(x, y, n, lac, pers) {
+                let val = 0,
+                    amp = 1,
+                    freq = 1,
+                    max = 0;
+                for (let i = 0; i < n; i++) {
+                    val += smooth(x * freq, y * freq) * amp;
+                    max += amp;
+                    amp *= pers;
+                    freq *= lac;
+                }
+                return val / max;
+            }
+            const oct1D = (t, f, n, l, p) => octave(t * f, 0, n, l, p);
+            const oct3D = (x, y, t, f, n, l, p) =>
+                octave(x * f + t * 0.3, y * f, n, l, p);
+            const powSgn = (x, p) => Math.sign(x) * Math.pow(Math.abs(x), p);
+
+            function resize() {
+                canvas.width = canvas.clientWidth;
+                canvas.height = canvas.clientHeight;
+            }
+            window.addEventListener("resize", resize);
+            resize();
+
+            function draw(ts) {
+                if (!bg.complete || !bg.naturalWidth) {
+                    requestAnimationFrame(draw);
+                    return;
+                }
+                if (!lastTime) lastTime = ts;
+                const dt = Math.min((ts - lastTime) / 1000, 0.1);
+                lastTime = ts;
+
+                const W = canvas.width,
+                    H = canvas.height;
+                const num = rem(ts / 1000 + timeOffset, 10000);
+
+                posX += 0.06 * (2 * oct1D(num, 0.02, 4, 2, 0.5) - 1) * dt;
+                posY += 0.06 * (2 * oct1D(num + 100, 0.02, 4, 2, 0.5) - 1) * dt;
+                posX = rem(posX, 1);
+                posY = rem(posY, 1);
+
+                const f = 0.5 * powSgn(Math.sin(0.21 * num + 2), 2) + 0.5;
+                const zoomU = lerp(f, 0.3, 0.5);
+                const zoomV =
+                    (((zoomU / bg.naturalHeight) * bg.naturalWidth) / W) * H;
+
+                const sx = W / (2 * zoomU * bg.naturalWidth);
+                const sy = H / (2 * zoomV * bg.naturalHeight);
+                const ox = -(posX - zoomU) * bg.naturalWidth * sx;
+                const oy = -(posY - zoomV) * bg.naturalHeight * sy;
+
+                const pat = ctx.createPattern(bg, "repeat");
+                const m = new DOMMatrix();
+                m.a = sx;
+                m.d = sy;
+                m.e = ox;
+                m.f = oy;
+                pat.setTransform(m);
+                ctx.fillStyle = pat;
+                ctx.fillRect(0, 0, W, H);
+
+                const cell = W / 12;
+                for (let x = 0; x < W; x += cell) {
+                    for (let y = 0; y < H; y += cell) {
+                        const a1 =
+                            0.35 *
+                            sat(
+                                oct3D(x + 1000, y, 0.7 * num, 0.5, 1, 2, 1) -
+                                    0.1,
+                            );
+                        if (a1 > 0.01) {
+                            ctx.strokeStyle = `rgba(0,0,0,${a1})`;
+                            ctx.lineWidth = 1;
+                            ctx.strokeRect(x, y, cell, cell);
+                        }
+                        const a2 =
+                            0.7 *
+                            Math.pow(oct3D(x, y, 0.5 * num, 0.5, 1, 2, 1), 3);
+                        if (a2 > 0.01) {
+                            ctx.fillStyle = `rgba(0,0,0,${a2})`;
+                            ctx.fillRect(x, y, cell, cell);
+                        }
+                    }
+                }
+
+                requestAnimationFrame(draw);
+            }
+
+            bg.onload = () => requestAnimationFrame(draw);
+        </script>
+    </body>
 </html>
